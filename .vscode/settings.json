@@ -24,7 +24,7 @@
     },
     "python.analysis.autoImportCompletions": true,
     "python.analysis.indexing": true,
-    "python.languageServer": "None",
+    "python.languageServer": "Default",
     "python.analysis.completeFunctionParens": true,
     "editor.rulers": [
         {

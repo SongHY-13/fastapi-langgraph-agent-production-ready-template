@@ -30,6 +30,9 @@ ENV/
 env/
 
 # Development tools
+.local-tools/
+.profiles/
+.ruff_cache/
 .idea
 .vscode
 *.swp

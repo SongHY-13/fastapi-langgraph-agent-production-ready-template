@@ -15,6 +15,15 @@ wheels/
 .env.development
 .env.staging
 .env.production
+.env.*
+!.env.example
+
+# Workspace-local development tools and generated runtime files
+.local-tools/
+.pytest_cache/
+.ruff_cache/
+logs/
+.profiles/
 
 # Misc
 *.ipynb
