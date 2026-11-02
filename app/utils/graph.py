@@ -1,7 +1,12 @@
 """This file contains the graph utilities for the application."""
 
+from typing import cast
+
 import tiktoken
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import (
+    BaseMessage,
+    HumanMessage,
+)
 from langchain_core.messages import trim_messages as _trim_messages
 
 from app.core.config import settings
@@ -83,6 +88,17 @@ def extract_text_content(content: str | list) -> str:
     return "".join(parts)
 
 
+def latest_user_text(messages: list[BaseMessage]) -> str:
+    """Return the text of the most recent user message in a LangGraph message list.
+
+    Walks the list in reverse so the assistant reply, tool calls and tool
+    messages after it are skipped. Returns an empty string when there is no
+    user message.
+    """
+    last_user = next((m for m in reversed(messages) if isinstance(m, HumanMessage)), None)
+    return extract_text_content(last_user.content) if last_user else ""
+
+
 def process_llm_response(response: BaseMessage) -> BaseMessage:
     """Normalise a raw LLM response so that ``response.content`` is always a plain string, regardless of the provider's content format.
 
@@ -135,4 +151,6 @@ def prepare_messages(messages: list[Message], system_prompt: str) -> list[Messag
         else:
             raise
 
-    return [Message(role="system", content=system_prompt)] + trimmed_messages
+    # langchain-core >= 1.6 types trim_messages() as returning BaseMessage;
+    # cast back to the declared return type to keep pyright passing.
+    return cast(list[Message], [Message(role="system", content=system_prompt)] + trimmed_messages)
