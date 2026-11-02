@@ -1,6 +1,6 @@
 # FastAPI LangGraph Agent Template
 
-> 中文接手文档：[匿名 AI 咨询研发导航](docs/zh-CN/README.md)（代码导读、Windows 初始化、两种匿名方案及研发交接清单）。
+> 中文研发文档：[AI 咨询后端导航](docs/zh-CN/README.md)（最新代码导读、小程序接口、RAGFlow、工作流、WSL 环境与客户资料清单）。
 
 A production-ready template for building AI agent backends with FastAPI and LangGraph. Handles the hard parts — stateful conversations, long-term memory, tool calling, observability, rate limiting, auth — so you can focus on your agent logic.
 

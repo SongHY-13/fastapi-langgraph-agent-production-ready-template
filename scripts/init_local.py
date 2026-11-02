@@ -16,7 +16,7 @@ def build_development_env(template: str) -> str:
     """Fill the repository template with local-only development settings."""
     values = {
         "APP_ENV": "development",
-        "PROJECT_NAME": '"Anonymous AI Consultation - Local"',
+        "PROJECT_NAME": '"AI Consultation - Local"',
         "DEBUG": "false",
         "LANGFUSE_TRACING_ENABLED": "false",
         "LANGFUSE_PUBLIC_KEY": '""',
@@ -25,7 +25,7 @@ def build_development_env(template: str) -> str:
         "SESSION_NAMING_ENABLED": "false",
         "JWT_SECRET_KEY": f'"{secrets.token_urlsafe(48)}"',
         "POSTGRES_HOST": "localhost",
-        "POSTGRES_DB": "anonymous_consultation_dev",
+        "POSTGRES_DB": "ai_consultation_dev",
         "POSTGRES_USER": "consultation_dev",
         "POSTGRES_PASSWORD": secrets.token_hex(24),
         "PROFILING_DIR": ".profiles",
@@ -42,7 +42,7 @@ def build_development_env(template: str) -> str:
             raise ValueError(f"Expected exactly one {name} entry in .env.example")
     return (
         "# Local development only. Add your API key before starting the application.\n"
-        "# Privacy features described in docs/zh-CN are design proposals, not implemented controls.\n" + template
+        "# Business features described in docs/zh-CN are design proposals until implemented.\n" + template
     )
 
 

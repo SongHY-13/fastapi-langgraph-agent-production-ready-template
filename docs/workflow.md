@@ -1,68 +1,105 @@
+# AI 咨询工作流
+
+更新：2026-11-02；代码基线：`5ab5e94`。本文件为待开发设计，当前 Python 主图仍只有 `chat` / `tool_call`。原草图中的情绪、意图、工具与输出检查保留，补齐业务闭环。
+
+调用关系：小程序 → 平台业务服务/BFF → AI 咨询接口 → LangGraph → 受控 RAGFlow 检索工具。用户通过小程序使用服务，平台负责登录身份；本服务验证调用方、用户权限并处理咨询。
+
+## 1. 每轮主流程
+
+```mermaid
 flowchart TD
-    UserMsg([用户消息]) --> EmotionalSupport
-    subgraph EmotionEngine [情感处理引擎]
-        CrisisIntervention[_crisis_intervention 节点]
-        EmotionRiskCheck{emotion_support 风险判断<br/>risk=HIGH/CRISIS<br/>或自伤/他伤/紧急?}
-        CancelPendingTools[取消/忽略未完成工具<br/>记录审计]
-        ToolJoin[工具结果汇合<br/>等待并行工具完成或超时<br/>失败降级]
-        ToolPlanner["_tool_planner 工具规划节点<br/>在 NormalChat 之前决定调用哪些工具"]
-        EmotionalSupport["emotional_support Tool<br/>输出emotion_label, need_emotional_support, risk, intent等情绪标签"]
-        RAGTool["RAG Tool 知识库检索增强"]
-        WebSearchTool["Web搜索 Tool 实时信息获取"]
-        ToolResultFilter["_tool_result_filter<br/>统一工具结果安全过滤<br/>情绪支持/RAG/Web 都走这里"]
-        NormalChat["正常 chat 节点<br/>只基于已准备好的上下文生成回复<br/>不再自行调用工具"]
+    IN[文本或已确认的语音转写] --> AUTH[鉴权与会话所有权]
+    AUTH --> SAFETY[输入安全与风险识别]
+    SAFETY --> ROUTE{优先级路由}
+    ROUTE -->|高风险| RISK[登记风险事件与紧急转介任务]
+    ROUTE -->|违规意图| REFUSE[经审核的拒答与合规引导]
+    ROUTE -->|已人工接管| HUMAN[转送人工通道]
+    ROUTE -->|主动转人工| HANDOFF[创建或复用转接单]
+    ROUTE -->|普通咨询| ACCEPT[幂等登记并申请普通生成槽位]
+    ACCEPT --> INTENT[领域与信息完整性判断]
+    INTENT --> CLEAR{信息是否充分}
+    CLEAR -->|不足且可继续澄清| CLARIFY[简短澄清问题]
+    CLEAR -->|达上限或不支持| FALLBACK[说明缺口并提供人工入口]
+    CLEAR -->|足够| PLAN[确定性工具规划]
+    PLAN -->|知识或政策或流程| RAG[RAGFlow 检索 tool]
+    PLAN -->|平台服务入口| CATALOG[能力目录 tool]
+    PLAN -->|无需外部事实| CONTEXT[组装上下文]
+    RAG --> JOIN[必需工具结果汇合与安全校验]
+    CATALOG --> JOIN
+    JOIN --> EVIDENCE{有适用证据或资源}
+    EVIDENCE -->|无| FALLBACK
+    EVIDENCE -->|有| CONTEXT
+    CONTEXT --> GENERATE[生成候选回复与引用]
+    GENERATE --> GUARD[输出安全和证据校验]
+    RISK --> CRISIS[审核过的紧急提示与人工入口]
+    CRISIS --> GUARD
+    REFUSE --> GUARD
+    HUMAN --> GUARD
+    HANDOFF --> GUARD
+    CLARIFY --> GUARD
+    FALLBACK --> GUARD
+    GUARD --> CHECK{审核结果}
+    CHECK -->|通过| FINALIZE[保存已审核结果和轮次状态]
+    CHECK -->|可修正且未达上限| REWRITE[受限改写]
+    REWRITE --> GUARD
+    CHECK -->|拦截或失败| TEMPLATE[预审核的场景兜底模板]
+    TEMPLATE --> FINALIZE
+    FINALIZE --> EMIT[审核后事件与唯一终态]
+    EMIT --> END[本轮结束]
+```
 
-        EmotionalSupport --> EmotionRiskCheck
+图是逻辑顺序，不能直接视为可执行的 `StateGraph` 定义。并行工具先声明本轮必需任务集合，再 join 一次；不得同时保留绕过检索结果的直达边。所有结束路径由一个 `finalize_turn` 收口。
 
-        EmotionRiskCheck -->|是：HIGH/CRISIS| CancelPendingTools
-        CancelPendingTools --> CrisisIntervention
-        EmotionRiskCheck -->|否：非高危，携带情绪结果| IntentRecognition
-        IntentRecognition --> IntentClearCheck
+## 2. 路由、澄清与风险
 
-        IntentClearCheck -->|不清晰| AskHuman
-        AskHuman --> WaitUserReply
-        WaitUserReply --> ClarifyRoundCheck
-        ClarifyRoundCheck -->|是：继续多轮澄清| EmotionalSupport
-        ClarifyRoundCheck -->|否：达到上限/取消| ClarifyFallback
+路由优先级：高风险 → 已人工接管 → 主动转人工 → AI 违规拒答 → 常规意图。内容拒答约束 AI 生成，不能吞掉同一条消息中的明确人工请求。高风险不等待常规检索、工具超时或用户确认；之后发现可信新增风险也要终止普通生成并升级。
 
-        IntentClearCheck -->|清晰| ToolPlanner
-        IntentClearCheck -->|清晰：携带情绪+意图+澄清记录| ToolJoin
+风险分流独立于普通生成槽位：即使会话已有生成任务，也先检查新消息的风险。紧急消息抢占普通任务、幂等登记风险与转介任务；旧任务在落库/继续发送前检查会话风险版本，停止迟到输出。鉴权和必要的反滥用保护仍执行，不能为绕过并发限制开放未授权接口。
 
-        ToolPlanner -->|按需，可并行 fan-out| RAGTool
-        ToolPlanner -->|按需，可并行 fan-out| WebSearchTool
-        ToolPlanner -->|无需外部工具| ToolJoin
-        RAGTool --> ToolJoin
-        WebSearchTool --> ToolJoin
+情绪支持与风险识别是受控节点，不交给模型自由决定是否调用。规则与结构化分类结合，考虑否定、历史和引用；关键词可触发保守处理，但不能作为唯一诊断。分类服务失败不得默认为低风险。毒品科普、预防与求助不能仅因出现敏感名词被一律拒绝。
 
-        ToolJoin --> ToolResultFilter
-        ToolResultFilter --> ContextBuilder
-        ContextBuilder --> NormalChat
-    end
+澄清只问完成回答所必需的信息，设置轮数上限；下一条消息重新经过鉴权和风险识别，不在 HTTP 请求中等待用户。`ask_human()` 仅是图暂停机制，向用户澄清、转工作人员、危机通知分别实现。
 
-    CrisisIntervention --> OutputGuard
-    NormalChat --> OutputGuard
+知识、政策、流程的事实问题强制检索已发布且适用的资料。问候、基础情绪支持可无需检索，但仍经安全审核。首版不启用开放 WebSearch 作为无命中回退。
 
-    subgraph OutputGuardEngine [最终输出安全过滤]
-        OutputGuard[_output_guard 最终输出安全过滤<br/>自伤/他伤/医疗法律边界/隐私/仇恨/越狱/危机模板校验]
-        SafeRewrite[安全改写/带约束重生成<br/>注入违规原因与安全约束<br/>移除敏感工具结果<br/>降低温度/限制长度]
-        SafeTemplate[预定安全模板<br/>通用/医疗法律/隐私/越狱/工具失败]
-        CrisisTemplate[危机安全模板+地区化紧急资源]
-        RetryCheck{重试次数 < N ?}
+## 3. 答案、引用与平台功能
 
-        OutputGuard -->|PASS| Pass[通过]
-        OutputGuard -->|SOFT_RISK| SafeRewrite
-        OutputGuard -->|HARD_BLOCK| SafeTemplate
-        OutputGuard -->|CRISIS_HIGH| CrisisTemplate
+来源取真实文档/片段 ID，审核时验证引用存在、地区/有效期适用且能够支持回答。政策名称、文号（如有）、原文出处由元数据提供；流程的条件、材料、时限与步骤来自发布版本。检索相似度不能当作答案正确率。
 
-        SafeRewrite --> RetryCheck
-        RetryCheck -->|是| OutputGuard
-        RetryCheck -->|否| SafeTemplate
+功能卡片输出允许列表中的 `action_code`，由小程序映射页面；追问、来源、卡片与正文一起审核。模型不能编造页面路径、工单成功状态或业务办理结果。医学高风险走经专业审核的紧急引导，其他医学类知识附客户确认的提示语。
 
-        Pass --> FinalOut[最终回复]
-        SafeTemplate --> FinalOut
-        CrisisTemplate --> Handoff[可选：转人工/危机干预]
-        Handoff --> FinalOut
-    end
+## 4. 无答案计数与转人工
 
-    FinalOut --> SaveSession[保存会话/审计日志<br/>风险等级/情绪/工具调用/安全事件]
-    SaveSession --> EndNode((结束))
+`unanswered_streak` 按服务端会话顺序原子更新，每个已完成轮次最多加一次。建议：有效作答清零；无证据、超出范围、服务失败无法回答加一；澄清、违规拒答、高风险处理、业务完成前取消与重复请求不加。计数只随业务终态提交，审核结果已经提交后再停止传输不回滚计数；失败事件和任务查询也返回计数及人工入口。具体统计口径需产品确认。
+
+连续两次无法作答必须提供人工入口，用户确认才创建普通转接单；用户主动要求则直接创建；高风险自动创建紧急转介。人工单包含原因、会话关联、上下文摘要、受理人/状态、回复及时间，幂等键保证重试不重复。
+
+会话模式为 `ai → handoff_pending → human_active → awaiting_resume → ai`，与工单投递/受理状态分开。人工关闭后需授权恢复 AI；投递失败保留可见重试状态，不能永久卡住或悄悄恢复。详见接口合同的恢复/重试规则。人工接管后仍做风险监测，避免双方抢答。普通单 24 小时未受理提醒由持久后台任务触发，不依赖聊天请求、进程内定时器或 `asyncio` 睡眠。高风险采用客户指定的紧急响应和升级时限，不能等待普通单的 24 小时规则。
+
+## 5. 高风险可靠处置
+
+先在同一业务事务中保存风险标记、风险证据关联与 outbox 任务，再发审核后的紧急提示。worker 按幂等键创建转介工单并通知工作人员，保存外部单号、投递状态、受理确认及处置状态；失败有重试、告警和补偿路径。
+
+紧急提示不等待外部工单网络调用。数据库不可用也应展示预审核的最小提示，准确说明转介提交状态，并使用独立可用的运维告警渠道报障；不能声称工作人员已收到。普通停止生成或断线不能撤销已登记的风险处置任务。
+
+紧急资源清单、地区/服务时间、服务对象以及未成年人通知策略由客户核验配置。年龄未知不能推断成年，通知对象不能由模型任意选择。业务记录加密保存、展示按权限脱敏；追踪日志避免原文外溢。
+
+## 6. 流式、取消、存储与运营
+
+首版方案：完整候选生成 → 审核 → 分段发送已审核正文；前面发送受控进度事件。这满足分段展示但有审核前置延迟，首字时延需与产品确认。若要求低延迟分段生成，应另验收逐段审核、跨段风险和不可撤回内容的边界。
+
+停止使用独立取消接口和 `generation_id`。审核答案落库时原子提交业务 `completed` 与计数；之前取消才形成 `cancelled`，之后停止只记录 `delivery_status=aborted`，不修改完成终态。断开连接不等于取消完成。普通任务每会话初期仅一个，紧急风险分流不受其槽位阻塞；`client_message_id` 防重复提交，断线可查询状态，不重放工单副作用。
+
+业务消息表用于会话分页、来源、反馈、风险标记、删除状态与加密存储，checkpoint 用于执行恢复。高风险不可由用户删除，留存依据、期限和解除权限待客户确认；普通删除覆盖消息、checkpoint、派生缓存/记忆以及后台写入，不能只删 `session` 表。
+
+FAQ、关键词联想、反馈和运营汇总提供独立接口。反馈关联回答 ID 与知识发布版本；功能卡片点击、到达、办理完成由平台回传，不能将卡片生成量当作业务转化量。
+
+## 7. 对原草图的修订与配套文档
+
+修复意图清晰分支同时进入 ToolPlanner 和 ToolJoin 的绕行；补齐澄清退出、主动人工、两次无法回答、可靠工单、审核后流式、停止生成、引用、功能卡片、留存和运营闭环。人工转介根据条件触发，不再是危机节点的可选旁路。
+
+- [总体设计](zh-CN/03-ai-consultation-design.md)：职责、数据与开发落点。
+- [接口合同](zh-CN/05-api-contract.md)：流事件、取消、卡片和工单约定。
+- [RAGFlow 方案](zh-CN/06-ragflow-integration.md)：版本、检索、引用和知识发布。
+- [材料与验收](zh-CN/07-materials-and-acceptance.md)：需求覆盖、双方输入及验收。
+- [实施顺序](zh-CN/04-handoff.md)：分阶段交付与阻塞项。
