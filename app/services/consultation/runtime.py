@@ -17,9 +17,9 @@ from app.core.logging import logger
 from app.core.observability import langfuse_callback_handler
 from app.schemas.consultation import Answer, GenerationCreate, ImageAttachment, RiskNotice
 from app.services.consultation.attachments import ImageResolver
-from app.services.consultation.deepseek import DeepSeek
 from app.services.consultation.generations import ConsultationRuntime, run_one
 from app.services.consultation.identity import PlatformAuthenticator, PlatformPrincipal
+from app.services.consultation.openai_compatible import OpenAICompatibleModel
 from app.services.consultation.repository import ConsultationRepository, RepositoryError
 from app.services.consultation.retrieval import RAGFlow, RetrievalScope
 from app.services.consultation.safety import ConsultationTurn, SafetyGate
@@ -50,7 +50,7 @@ def compose_consultation(
     safety: SafetyGate,
     ragflow: RAGFlow,
     retrieval_scope: RetrievalScope,
-    deepseek: DeepSeek,
+    model: OpenAICompatibleModel,
     in_scope: InScope,
     image_resolver: ImageResolver | None = None,
     trace_handler: BaseCallbackHandler | None = None,
@@ -63,7 +63,7 @@ def compose_consultation(
     retrieval scope is deployment supplied and is captured for both retrieval
     and fresh citation validation.
     """
-    accepts_images = image_resolver is not None and image_resolver.decode is not None and deepseek.vision_approved
+    accepts_images = image_resolver is not None and image_resolver.decode is not None and model.vision_approved
 
     async def retrieve(scoped: ScopedInput) -> tuple[Evidence, ...]:
         return await ragflow(scoped, retrieval_scope)
@@ -96,13 +96,13 @@ def compose_consultation(
     workflow = ConsultationWorkflow(
         safety,
         retrieve,
-        deepseek.draft,
-        deepseek.review,
+        model.draft,
+        model.review,
         in_scope,
-        allowed_actions=deepseek.allowed_actions,
+        allowed_actions=model.allowed_actions,
         verify_citations=verify_citations,
         resolve_images=image_resolver.resolve_lease if image_resolver is not None else None,
-        trace_handler=trace_handler or (langfuse_callback_handler if deepseek.api_key else None),
+        trace_handler=trace_handler or langfuse_callback_handler,
     )
     runtime = ConsultationRuntime(
         repository=repository,

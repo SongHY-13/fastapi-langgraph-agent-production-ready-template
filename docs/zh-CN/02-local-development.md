@@ -109,3 +109,15 @@ Compose app 的健康检查使用 curl，而当前 Dockerfile 未显式安装它
 ## 6. 咨询运行配置
 
 `CONSULTATION_ENABLED` 默认关闭。部署方需在启动前向 `app.state.consultation_components_factory` 注入异步工厂，可通过 `compose_consultation` 组装依赖。工厂应提供真实平台鉴权、受控检索范围和发布目录、审核通过的风险策略、模型适配器。工厂缺失时，咨询路由即使可见也拒绝访问。图片处理需额外提供按平台用户授权的原文件读取和解码校验。当前仓库的离线测试不依赖付费密钥。
+
+在部署工厂中构造 `OpenAICompatibleModel`，通过 `compose_consultation(model=...)` 注入。`base_url` 填 API 根地址，适配器会追加 `/chat/completions`。`model` 填部署端公布的模型 ID。需要鉴权时，使用 HTTPS 地址并从受控配置读取该端点自己的 `api_key`。无需鉴权的本地服务可以省略密钥。
+
+| 配置 | 自部署 vLLM 示例 | DeepSeek 开发示例 |
+| --- | --- | --- |
+| `base_url` | `http://127.0.0.1:8000/v1` | `https://api.deepseek.com` |
+| `model` | 部署端公布的模型 ID | `deepseek-flash` |
+| `json_mode` | 确认支持 `response_format` 后启用 | `True` |
+| `deepseek_disable_thinking` | `False` | `True` |
+| `vision_approved` | 图文输入通过验收后启用 | 图文输入通过验收后启用 |
+
+`json_mode` 默认关闭。适配器仍要求模型返回 JSON 对象，并检查正文、来源和输出审核结果。`token_limit_field` 默认为 `max_tokens`，端点要求时可改为 `max_completion_tokens`。`timeout_seconds` 默认 4 秒，可按目标模型延迟调整，同时确保单轮工作流的总耗时预算低于 worker 租约。vLLM 的接口说明见 [OpenAI 兼容服务文档](https://docs.vllm.ai/en/stable/serving/online_serving/openai_compatible_server/)。

@@ -3,6 +3,7 @@
 import asyncio
 import json
 from base64 import b64encode
+from typing import Literal
 
 import httpx
 import pytest
@@ -12,27 +13,24 @@ from app.core.langgraph.consultation_graph import Evidence, ScopedInput
 from app.schemas.consultation import MAX_IMAGE_BYTES, Answer, AnswerAction, AnswerSource, ImageAttachment
 
 from app.services.consultation.attachments import ImageResolver
-from app.services.consultation.deepseek import DeepSeek
 from app.services.consultation.identity import PlatformPrincipal
+from app.services.consultation.openai_compatible import OpenAICompatibleModel
 from app.services.consultation.provider_http import ProviderUnavailable
 from app.services.consultation.repository import RepositoryError
-from app.services.consultation.retrieval import RetrievalScope
 from app.services.consultation.safety import ValidatedImage
 
 
-def test_provider_defaults_fail_closed() -> None:
-    """Keep the provider off when no dedicated key is configured."""
+def test_model_rejects_images_without_vision_approval() -> None:
+    """Reject image input without contacting a text-only endpoint."""
 
     async def run() -> None:
         def unexpected(request: httpx.Request) -> httpx.Response:
             raise AssertionError("unexpected transport call")
 
-        provider = DeepSeek(transport=httpx.MockTransport(unexpected))
-        assert (await provider.classify("question", ())).kind == "unavailable"
+        provider = OpenAICompatibleModel(httpx.MockTransport(unexpected), "http://localhost:8000/v1", "test-model")
+        assert (await provider.classify("question", (ValidatedImage("image/png", b"image"),))).kind == "unavailable"
 
     asyncio.run(run())
-    assert RetrievalScope(()).dataset_ids == ()
-    assert ImageResolver is not None
 
 
 @pytest.mark.parametrize("vision", [False, True])
@@ -45,6 +43,7 @@ def test_deepseek_uses_bounded_json_and_inline_vision(vision: bool) -> None:
         payload = json.loads(request.content)
         assert payload["model"] == "deepseek-flash"
         assert payload["thinking"] == {"type": "disabled"}
+        assert payload["response_format"] == {"type": "json_object"}
         assert 0 < payload["max_tokens"] <= 768
         content = payload["messages"][1]["content"]
         if vision:
@@ -55,24 +54,58 @@ def test_deepseek_uses_bounded_json_and_inline_vision(vision: bool) -> None:
             200, json={"choices": [{"finish_reason": "stop", "message": {"content": '{"kind":"normal"}'}}]}
         )
 
-    provider = DeepSeek(httpx.MockTransport(respond), api_key="synthetic", vision_approved=vision)
+    provider = OpenAICompatibleModel(
+        httpx.MockTransport(respond),
+        "https://api.deepseek.com",
+        "deepseek-flash",
+        api_key="synthetic",
+        vision_approved=vision,
+        json_mode=True,
+        deepseek_disable_thinking=True,
+    )
     images = (ValidatedImage("image/png", b"abc"),) if vision else ()
     assert asyncio.run(provider.classify("question", images)).kind == "normal"
 
 
+@pytest.mark.parametrize("token_field", ["max_tokens", "max_completion_tokens"])
+def test_local_compatible_model_uses_only_baseline_request_fields(
+    monkeypatch: pytest.MonkeyPatch, token_field: Literal["max_tokens", "max_completion_tokens"]
+) -> None:
+    """Allow a deployment-specific base URL and a keyless local server."""
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "http://localhost:8000/v1/chat/completions"
+        assert "authorization" not in request.headers
+        payload = json.loads(request.content)
+        assert payload["model"] == "customer-model"
+        assert payload.keys() == {"model", "messages", token_field} and payload[token_field] == 768
+        return httpx.Response(
+            200, json={"choices": [{"finish_reason": "stop", "message": {"content": '{"kind":"normal"}'}}]}
+        )
+
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-be-forwarded")
+    provider = OpenAICompatibleModel(
+        httpx.MockTransport(respond),
+        base_url="http://localhost:8000/v1/",
+        model="customer-model",
+        token_limit_field=token_field,
+    )
+    assert asyncio.run(provider.classify("question", ())).kind == "normal"
+
+
 @pytest.mark.parametrize("content", ["malformed", "[]", '{"kind":"high_risk"}', '{"kind":true}'])
-def test_deepseek_rejects_untrusted_classification(content: str) -> None:
+def test_model_rejects_untrusted_classification(content: str) -> None:
     """Reject malformed JSON and classifications without approved semantics."""
 
     def respond(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": content}}]})
 
-    provider = DeepSeek(httpx.MockTransport(respond), api_key="synthetic")
+    provider = OpenAICompatibleModel(httpx.MockTransport(respond), "http://localhost:8000/v1", "test-model")
     assert asyncio.run(provider.classify("question", ())).kind == "unavailable"
 
 
 @pytest.mark.parametrize("action_code", ["booking", "forged"])
-def test_deepseek_draft_and_review_use_only_approved_actions(action_code: str) -> None:
+def test_model_draft_and_review_use_only_approved_actions(action_code: str) -> None:
     """Send allowed action codes and review the full displayed result."""
     action = AnswerAction(action_code="booking", label="预约挂号", params={})
     source = AnswerSource.model_validate(
@@ -100,7 +133,9 @@ def test_deepseek_draft_and_review_use_only_approved_actions(action_code: str) -
         )
 
     async def exercise() -> None:
-        provider = DeepSeek(httpx.MockTransport(respond), api_key="synthetic", allowed_actions=(action,))
+        provider = OpenAICompatibleModel(
+            httpx.MockTransport(respond), "http://localhost:8000/v1", "test-model", allowed_actions=(action,)
+        )
         scoped = ScopedInput("如何预约？", (), (("先前的问题", "先前的回答"),))
         evidence = (Evidence(source, "流程正文"),)
         if action_code == "forged":

@@ -9,9 +9,9 @@ from fastapi import FastAPI
 
 from app.core.langgraph.consultation_graph import ConsultationWorkflow
 from app.schemas.consultation import GenerationCreate, ImageAttachment, RiskNotice
-from app.services.consultation.deepseek import DeepSeek
 from app.services.consultation.generations import ConsultationRuntime
 from app.services.consultation.identity import PlatformPrincipal, authenticate_platform
+from app.services.consultation.openai_compatible import OpenAICompatibleModel
 from app.services.consultation.repository import ConsultationRepository, RepositoryError
 from app.services.consultation.retrieval import RAGFlow, RetrievalScope
 from app.services.consultation.runtime import (
@@ -85,7 +85,7 @@ def test_composed_admission_checks_text_risk_before_image_availability() -> None
             safety=SafetyGate(classify),
             ragflow=RAGFlow(transport, unused),
             retrieval_scope=RetrievalScope(()),
-            deepseek=DeepSeek(transport),
+            model=OpenAICompatibleModel(transport, base_url="http://localhost:8000/v1", model="test-model"),
             in_scope=unused,
         )
         principal = PlatformPrincipal("caller", "tenant", "subject")

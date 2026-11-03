@@ -1,8 +1,10 @@
-"""Default-off DeepSeek consultation adapter."""
+"""Bounded OpenAI-compatible consultation adapter."""
 
 import base64
 import json
 from dataclasses import dataclass, field
+from math import isfinite
+from typing import Literal
 
 import httpx
 
@@ -12,19 +14,45 @@ from app.services.consultation.provider_http import ProviderUnavailable, bounded
 from app.services.consultation.safety import SafetyDecision, ValidatedImage
 
 
-@dataclass(slots=True)
-class DeepSeek:
-    """Dedicated provider with an injectable transport and explicit vision approval."""
+@dataclass(frozen=True, slots=True)
+class OpenAICompatibleModel:
+    """Deployment-selected endpoint with explicit optional model capabilities."""
 
     transport: httpx.AsyncBaseTransport = field(repr=False)
+    base_url: str
+    model: str
     api_key: str | None = field(default=None, repr=False)
     vision_approved: bool = False
+    json_mode: bool = False
+    deepseek_disable_thinking: bool = False
+    timeout_seconds: float = 4
+    token_limit_field: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
     allowed_actions: tuple[AnswerAction, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Validate deployment settings before processing consultation data."""
+        try:
+            url = httpx.URL(self.base_url.strip())
+        except httpx.InvalidURL:
+            raise ValueError("invalid consultation model base URL") from None
+        if (
+            url.scheme not in {"http", "https"}
+            or not url.host
+            or url.userinfo
+            or "?" in self.base_url
+            or "#" in self.base_url
+        ):
+            raise ValueError("invalid consultation model base URL")
+        if not self.model.strip() or not isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
+            raise ValueError("invalid consultation model or timeout")
+        if self.token_limit_field not in {"max_tokens", "max_completion_tokens"}:
+            raise ValueError("invalid consultation token limit field")
+        object.__setattr__(self, "base_url", str(url).rstrip("/"))
 
     async def _chat(
         self, instruction: str, data: dict[str, object], images: tuple[ValidatedImage, ...] = ()
     ) -> dict[str, object]:
-        if not self.api_key or (images and not self.vision_approved):
+        if images and not self.vision_approved:
             raise ProviderUnavailable
         content: list[dict[str, object]] = [{"type": "text", "text": json.dumps(data, ensure_ascii=False)}]
         for image in images:
@@ -32,22 +60,25 @@ class DeepSeek:
                 raise ProviderUnavailable
             encoded = base64.b64encode(image.content).decode("ascii")
             content.append({"type": "image_url", "image_url": {"url": f"data:{image.media_type};base64,{encoded}"}})
+        payload: dict[str, object] = {
+            "model": self.model,
+            self.token_limit_field: 768,
+            "messages": [
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": content if images else content[0]["text"]},
+            ],
+        }
+        if self.json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        if self.deepseek_disable_thinking:
+            payload["thinking"] = {"type": "disabled"}
         body, _ = await bounded_request(
             self.transport,
             "POST",
-            "https://api.deepseek.com/chat/completions",
-            headers={"Authorization": f"Bearer {self.api_key}"},
-            payload={
-                "model": "deepseek-flash",
-                "thinking": {"type": "disabled"},
-                "max_tokens": 768,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": instruction},
-                    {"role": "user", "content": content if images else content[0]["text"]},
-                ],
-            },
-            timeout=4,
+            f"{self.base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {self.api_key}"} if self.api_key else {},
+            payload=payload,
+            timeout=self.timeout_seconds,
             max_bytes=32768,
         )
         envelope = parse_json(body)
