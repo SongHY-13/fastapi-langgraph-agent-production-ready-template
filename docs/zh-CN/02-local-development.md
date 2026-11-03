@@ -6,7 +6,7 @@
 
 | 项目 | 本次确认 |
 | --- | --- |
-| 仓库 | 个人 fork `SongHY-13`，本地与 fetch 后 origin/master 一致，提交 `5ab5e94` |
+| 仓库 | 个人 fork `SongHY-13`；咨询开发进度见 [研发交接](04-handoff.md) |
 | 应用环境 | 现有 `.venv/Scripts/python.exe` 为 Python 3.13.16，可复用 |
 | uv | 现有 `.local-tools/bootstrap/Scripts/uv.exe` 为 0.13.0，可复用 |
 | WSL | Ubuntu、docker-desktop 均为 WSL2，检查时运行中 |
@@ -73,7 +73,7 @@ WSL 中 `/mnt/d/WorkSpace/code/fastapi-langgraph-agent-production-ready-template
 
 不要将现有 MySQL 数据目录挂入 RAGFlow 数据库，或为复用升级其它业务容器。下载前确认磁盘/WSL 内存、端口、镜像体积和所选版本，使用隔离的项目名与 volume。RAGFlow 与本工程 PostgreSQL 是不同职责。
 
-以下是**将来决定启动本工程数据库时**的命令，本次没有执行启动：
+启动本工程开发数据库的命令：
 
 ```powershell
 docker context show
@@ -91,30 +91,21 @@ Docker Desktop 的 WSL 集成需在 Ubuntu 中启用。Windows Docker CLI 与 WS
 & $uv run --no-sync uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-检查 [Swagger](http://127.0.0.1:8000/docs) 与 `/health`；`/health` 只证明数据库连通，不验证业务迁移、模型、RAG或人工通道。模板注册/会话可用于自测，新业务平台接入按 [05](05-api-contract.md) 实施，不要求真实用户再次注册。
+检查 [Swagger](http://127.0.0.1:8000/docs) 与 `/health`。`/health` 用于检查数据库连通；业务迁移、平台鉴权、模型和 RAG 需分别验证。平台接入按 [v0.4 协议](08-miniprogram-mvp-api.md) 实施。
 
 Compose app 的健康检查使用 curl，而当前 Dockerfile 未显式安装它；如选全容器运行，需一并验证该工具和健康状态。本次推荐直接复用现有 Windows 应用环境。
 
-## 5. 检查与本次记录
+## 5. 本地自测
 
 ```powershell
 & $uv run --no-sync ruff check .
 & $uv run --no-sync ruff format --check .
 & $uv run --no-sync pyright
+& .\.venv\Scripts\python.exe -m pytest tests/consultation -q
 ```
 
-以上使用已安装依赖，不新建环境。`evals.main` 会读取 Langfuse 并调用模型，不能代替离线检查。新业务确定性测试需另建，具体见 [实施计划](04-handoff.md)。
+以上命令复用已安装依赖。咨询测试使用确定性替身。数据库集成测试会对指定库执行迁移和回滚，只对独立的临时 PostgreSQL 库设置 `CONSULTATION_TEST_DSN`。未设置时会跳过相关用例。`evals.main` 会读取 Langfuse 并调用模型，应与本地离线自测分开执行。最新验证结果见 [研发交接](04-handoff.md)。
 
-本次实际检查结果：
+## 6. 咨询运行配置
 
-| 检查 | 结果 |
-| --- | --- |
-| Ruff lint | 通过 |
-| Ruff 格式 | 46 个 Python 文件通过 |
-| 项目 Pyright | 按项目相同标准及既有 `.venv`、仓库导入路径检查：0 errors / 0 warnings |
-| 初始化脚本 Pyright | 在其既有 rich 工具环境中另检：0 errors / 0 warnings |
-| 初始化默认值 | 用 `.env.example` 在内存中验证新项目/库名，不改真实配置 |
-| 文档 | Markdown 围栏、本地链接、JSON 示例及 PowerShell 语法检查通过 |
-| 差异 | `git diff --check` 通过 |
-
-数据库、真实模型/RAG、SSE和工单端到端未在本次执行。同事此前已跑通模板，与本次业务尚未开发是两项不同状态。类型检查的临时定位配置仅放在忽略的 `.local-tools/`，未调整项目检查规则或安装新依赖。
+`CONSULTATION_ENABLED` 默认关闭。部署方需在启动前向 `app.state.consultation_components_factory` 注入异步工厂，可通过 `compose_consultation` 组装依赖。工厂应提供真实平台鉴权、受控检索范围和发布目录、审核通过的风险策略、模型适配器。工厂缺失时，咨询路由即使可见也拒绝访问。图片处理需额外提供按平台用户授权的原文件读取和解码校验。当前仓库的离线测试不依赖付费密钥。

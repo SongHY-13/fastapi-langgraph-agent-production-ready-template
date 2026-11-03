@@ -30,6 +30,7 @@ from app.core.middleware import (
     ProfilingMiddleware,
 )
 from app.core.observability import langfuse_init
+from app.services.consultation.runtime import start_consultation, stop_consultation
 from app.services.database import database_service
 from app.services.memory import memory_service
 
@@ -69,14 +70,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.exception("memory_service_pre_warm_failed", error=str(e))
 
-    yield
-
-    # Cleanup on shutdown
-    await cache_service.close()
-    if agent._connection_pool:
-        await agent._connection_pool.close()
-        logger.info("connection_pool_closed")
-    logger.info("application_shutdown")
+    try:
+        consultation_factory = getattr(app.state, "consultation_components_factory", None)
+        if settings.CONSULTATION_ENABLED and consultation_factory is not None:
+            await start_consultation(app, consultation_factory)
+        yield
+    finally:
+        await stop_consultation(app)
+        await cache_service.close()
+        if agent._connection_pool:
+            await agent._connection_pool.close()
+            logger.info("connection_pool_closed")
+        logger.info("application_shutdown")
 
 
 app = FastAPI(

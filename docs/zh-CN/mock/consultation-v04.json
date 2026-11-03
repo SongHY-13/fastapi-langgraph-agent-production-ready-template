@@ -1,0 +1,459 @@
+{
+  "text": {
+    "session_id": "session_1",
+    "submit": {
+      "client_message_id": "local_1",
+      "text": "预约挂号需要准备什么？",
+      "input_type": "text"
+    },
+    "accepted": {
+      "generation_id": "gen_1",
+      "user_message_id": "msg_1",
+      "status": "queued",
+      "request_id": "req_gen_1"
+    },
+    "subscription_id": "sub_gen_1",
+    "events": [
+      {
+        "event_id": "gen_1:1",
+        "generation_id": "gen_1",
+        "seq": 1,
+        "type": "answer.delta",
+        "payload": {
+          "answer_id": "ans_1",
+          "text": "请先确认你要预约的服务。"
+        },
+        "request_id": "req_events_gen_1"
+      },
+      {
+        "event_id": "gen_1:2",
+        "generation_id": "gen_1",
+        "seq": 2,
+        "type": "answer.metadata",
+        "payload": {
+          "answer_id": "ans_1",
+          "sources": [
+            {
+              "source_id": "src_1",
+              "title": "预约说明（模拟）",
+              "source_url": "https://example.com/mock/appointment"
+            }
+          ],
+          "actions": [
+            {
+              "action_code": "appointment_booking",
+              "label": "去预约挂号",
+              "params": {
+                "source": "ai_consultation"
+              }
+            }
+          ],
+          "followups": [
+            "有哪些服务可以预约？"
+          ]
+        },
+        "request_id": "req_events_gen_1"
+      },
+      {
+        "event_id": "gen_1:3",
+        "generation_id": "gen_1",
+        "seq": 3,
+        "type": "generation.completed",
+        "payload": {
+          "answer_id": "ans_1",
+          "advisory": null
+        },
+        "request_id": "req_events_gen_1"
+      }
+    ],
+    "result": {
+      "status": "completed",
+      "answer": {
+        "answer_id": "ans_1",
+        "sources": [
+          {
+            "source_id": "src_1",
+            "title": "预约说明（模拟）",
+            "source_url": "https://example.com/mock/appointment"
+          }
+        ],
+        "actions": [
+          {
+            "action_code": "appointment_booking",
+            "label": "去预约挂号",
+            "params": {
+              "source": "ai_consultation"
+            }
+          }
+        ],
+        "followups": [
+          "有哪些服务可以预约？"
+        ],
+        "text": "请先确认你要预约的服务。"
+      },
+      "risk": null,
+      "advisory": null,
+      "request_id": "req_result_gen_1"
+    }
+  },
+  "image": {
+    "session_id": "session_2",
+    "submit": {
+      "client_message_id": "local_2",
+      "text": "",
+      "input_type": "text",
+      "attachments": [
+        {
+          "file_id": "file_1",
+          "media_type": "image/jpeg",
+          "read_url": "https://files.example.com/mock/photo.jpg"
+        }
+      ]
+    },
+    "accepted": {
+      "generation_id": "gen_2",
+      "user_message_id": "msg_2",
+      "status": "queued",
+      "request_id": "req_gen_2"
+    },
+    "subscription_id": "sub_gen_2",
+    "events": [
+      {
+        "event_id": "gen_2:1",
+        "generation_id": "gen_2",
+        "seq": 1,
+        "type": "answer.delta",
+        "payload": {
+          "answer_id": "ans_2",
+          "text": "请说明你想了解图片中的哪一项。 "
+        },
+        "request_id": "req_events_gen_2"
+      },
+      {
+        "event_id": "gen_2:2",
+        "generation_id": "gen_2",
+        "seq": 2,
+        "type": "answer.metadata",
+        "payload": {
+          "answer_id": "ans_2",
+          "sources": [],
+          "actions": [],
+          "followups": []
+        },
+        "request_id": "req_events_gen_2"
+      },
+      {
+        "event_id": "gen_2:3",
+        "generation_id": "gen_2",
+        "seq": 3,
+        "type": "generation.completed",
+        "payload": {
+          "answer_id": "ans_2",
+          "advisory": null
+        },
+        "request_id": "req_events_gen_2"
+      }
+    ],
+    "result": {
+      "status": "completed",
+      "answer": {
+        "answer_id": "ans_2",
+        "sources": [],
+        "actions": [],
+        "followups": [],
+        "text": "请说明你想了解图片中的哪一项。 "
+      },
+      "risk": null,
+      "advisory": null,
+      "request_id": "req_result_gen_2"
+    }
+  },
+  "advisory": {
+    "session_id": "session_3",
+    "submit": {
+      "client_message_id": "local_3",
+      "text": "再帮我确认一下。",
+      "input_type": "text"
+    },
+    "accepted": {
+      "generation_id": "gen_3",
+      "user_message_id": "msg_3",
+      "status": "queued",
+      "request_id": "req_gen_3"
+    },
+    "subscription_id": "sub_gen_3",
+    "events": [
+      {
+        "event_id": "gen_3:1",
+        "generation_id": "gen_3",
+        "seq": 1,
+        "type": "answer.delta",
+        "payload": {
+          "answer_id": "ans_3",
+          "text": "当前没有可用依据，建议咨询人工。 "
+        },
+        "request_id": "req_events_gen_3"
+      },
+      {
+        "event_id": "gen_3:2",
+        "generation_id": "gen_3",
+        "seq": 2,
+        "type": "answer.metadata",
+        "payload": {
+          "answer_id": "ans_3",
+          "sources": [],
+          "actions": [],
+          "followups": []
+        },
+        "request_id": "req_events_gen_3"
+      },
+      {
+        "event_id": "gen_3:3",
+        "generation_id": "gen_3",
+        "seq": 3,
+        "type": "generation.completed",
+        "payload": {
+          "answer_id": "ans_3",
+          "advisory": {
+            "code": "human_handoff_suggested",
+            "reason": "consecutive_unanswered"
+          }
+        },
+        "request_id": "req_events_gen_3"
+      }
+    ],
+    "result": {
+      "status": "completed",
+      "answer": {
+        "answer_id": "ans_3",
+        "sources": [],
+        "actions": [],
+        "followups": [],
+        "text": "当前没有可用依据，建议咨询人工。 "
+      },
+      "risk": null,
+      "advisory": {
+        "code": "human_handoff_suggested",
+        "reason": "consecutive_unanswered"
+      },
+      "request_id": "req_result_gen_3"
+    }
+  },
+  "risk": {
+    "session_id": "session_1",
+    "submit": {
+      "client_message_id": "local_4",
+      "text": "【模拟高风险输入】",
+      "input_type": "text"
+    },
+    "accepted": {
+      "generation_id": "gen_4",
+      "user_message_id": "msg_4",
+      "status": "queued",
+      "request_id": "req_gen_4"
+    },
+    "subscription_id": "sub_gen_4",
+    "events": [
+      {
+        "event_id": "gen_4:1",
+        "generation_id": "gen_4",
+        "seq": 1,
+        "type": "risk.notice",
+        "payload": {
+          "status": "human_handoff_required",
+          "message": "【模拟】请立即联系人工协助。",
+          "resources": []
+        },
+        "request_id": "req_events_gen_4"
+      },
+      {
+        "event_id": "gen_4:2",
+        "generation_id": "gen_4",
+        "seq": 2,
+        "type": "generation.completed",
+        "payload": {
+          "answer_id": null,
+          "advisory": null
+        },
+        "request_id": "req_events_gen_4"
+      }
+    ],
+    "result": {
+      "status": "completed",
+      "answer": null,
+      "risk": {
+        "status": "human_handoff_required",
+        "message": "【模拟】请立即联系人工协助。",
+        "resources": []
+      },
+      "advisory": null,
+      "request_id": "req_result_gen_4"
+    }
+  },
+  "busy": {
+    "http_status": 409,
+    "error": {
+      "code": "GENERATION_IN_PROGRESS",
+      "message": "当前回复仍在生成",
+      "retryable": true,
+      "request_id": "req_busy"
+    }
+  },
+  "service_busy": {
+    "http_status": 503,
+    "error": {
+      "code": "SERVICE_UNAVAILABLE",
+      "message": "服务繁忙，请稍后重试",
+      "retryable": true,
+      "request_id": "req_service_busy"
+    }
+  },
+  "cancel": {
+    "accepted": {
+      "generation_id": "gen_5",
+      "user_message_id": "msg_5",
+      "status": "queued",
+      "request_id": "req_gen_5"
+    },
+    "subscription_id": "sub_gen_5",
+    "cancel_request": {
+      "subscription_id": "sub_gen_5"
+    },
+    "cancelled": {
+      "status": "cancelling",
+      "delivery_status": "aborted",
+      "request_id": "req_cancel"
+    },
+    "event_delivery": "reconnect_replay",
+    "events": [
+      {
+        "event_id": "gen_5:1",
+        "generation_id": "gen_5",
+        "seq": 1,
+        "type": "generation.cancelled",
+        "payload": {},
+        "request_id": "req_events_gen_5"
+      }
+    ],
+    "result": {
+      "status": "cancelled",
+      "answer": null,
+      "risk": null,
+      "advisory": null,
+      "request_id": "req_result_gen_5"
+    }
+  },
+  "expired": {
+    "generation_id": "gen_4",
+    "after_seq": 1,
+    "http_status": 410,
+    "error": {
+      "code": "EVENT_HISTORY_EXPIRED",
+      "message": "请查询原任务",
+      "retryable": false,
+      "request_id": "req_expired"
+    },
+    "result": {
+      "status": "completed",
+      "answer": null,
+      "risk": {
+        "status": "human_handoff_required",
+        "message": "【模拟】请立即联系人工协助。",
+        "resources": []
+      },
+      "advisory": null,
+      "request_id": "req_result_gen_4"
+    }
+  },
+  "regenerate": {
+    "session_id": "session_1",
+    "previous_answer_id": "ans_1",
+    "idempotency_key": "regen_1",
+    "regenerate": {},
+    "accepted": {
+      "generation_id": "gen_6",
+      "user_message_id": "msg_1",
+      "status": "queued",
+      "request_id": "req_gen_6"
+    },
+    "subscription_id": "sub_gen_6",
+    "events": [
+      {
+        "event_id": "gen_6:1",
+        "generation_id": "gen_6",
+        "seq": 1,
+        "type": "answer.delta",
+        "payload": {
+          "answer_id": "ans_6",
+          "text": "可以先从平台预约入口选择对应服务。 "
+        },
+        "request_id": "req_events_gen_6"
+      },
+      {
+        "event_id": "gen_6:2",
+        "generation_id": "gen_6",
+        "seq": 2,
+        "type": "answer.metadata",
+        "payload": {
+          "answer_id": "ans_6",
+          "sources": [],
+          "actions": [],
+          "followups": []
+        },
+        "request_id": "req_events_gen_6"
+      },
+      {
+        "event_id": "gen_6:3",
+        "generation_id": "gen_6",
+        "seq": 3,
+        "type": "generation.completed",
+        "payload": {
+          "answer_id": "ans_6",
+          "advisory": null
+        },
+        "request_id": "req_events_gen_6"
+      }
+    ],
+    "result": {
+      "status": "completed",
+      "answer": {
+        "answer_id": "ans_6",
+        "sources": [],
+        "actions": [],
+        "followups": [],
+        "text": "可以先从平台预约入口选择对应服务。 "
+      },
+      "risk": null,
+      "advisory": null,
+      "request_id": "req_result_gen_6"
+    }
+  },
+  "failed": {
+    "accepted": {
+      "generation_id": "gen_7",
+      "user_message_id": "msg_7",
+      "status": "queued",
+      "request_id": "req_gen_7"
+    },
+    "events": [
+      {
+        "event_id": "gen_7:1",
+        "generation_id": "gen_7",
+        "seq": 1,
+        "type": "generation.failed",
+        "payload": {
+          "code": "ATTACHMENT_UNAVAILABLE",
+          "retryable": true
+        },
+        "request_id": "req_events_gen_7"
+      }
+    ],
+    "result": {
+      "status": "failed",
+      "answer": null,
+      "risk": null,
+      "advisory": null,
+      "request_id": "req_result_gen_7"
+    }
+  }
+}

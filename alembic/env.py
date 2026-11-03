@@ -4,13 +4,15 @@ Loads the database URL from the application's settings so migrations
 stay in sync with the running app configuration.
 """
 
+from importlib import import_module
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
+from sqlalchemy.engine import URL
 from sqlmodel import SQLModel
 
 from alembic import context
-from app.core.config import settings
+from app.models.consultation import ConsultationEvent, ConsultationGeneration, ConsultationSession, ConsultationTurn  # noqa: F401
 from app.models.session import Session  # noqa: F401
 from app.models.thread import Thread  # noqa: F401
 from app.models.user import User  # noqa: F401
@@ -22,12 +24,22 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Build the database URL from app settings
-DATABASE_URL = (
-    f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
-    f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
-)
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+# An explicit URL supports isolated migration verification. Offline SQL needs only the dialect.
+database_url = config.attributes.get("database_url")
+if database_url is None:
+    if context.is_offline_mode():
+        database_url = "postgresql://"
+    else:
+        settings = import_module("app.core.config").settings
+        database_url = URL.create(
+            "postgresql",
+            username=settings.POSTGRES_USER,
+            password=settings.POSTGRES_PASSWORD,
+            host=settings.POSTGRES_HOST,
+            port=int(settings.POSTGRES_PORT),
+            database=settings.POSTGRES_DB,
+        ).render_as_string(hide_password=False)
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 # Point Alembic at our SQLModel metadata for autogenerate support
 target_metadata = SQLModel.metadata

@@ -8,6 +8,8 @@ from fastapi import APIRouter
 
 from app.api.v1.auth import router as auth_router
 from app.api.v1.chatbot import router as chatbot_router
+from app.api.v1.consultations import router as consultations_router
+from app.core.config import settings
 from app.core.logging import logger
 
 api_router = APIRouter()
@@ -15,6 +17,10 @@ api_router = APIRouter()
 # Include routers
 api_router.include_router(auth_router, prefix="/auth", tags=["Auth"])
 api_router.include_router(chatbot_router, prefix="/chatbot", tags=["Chatbot"])
+
+
+if settings.CONSULTATION_ENABLED:
+    api_router.include_router(consultations_router, prefix="/consultations", tags=["Consultations"])
 
 
 @api_router.get("/health")
