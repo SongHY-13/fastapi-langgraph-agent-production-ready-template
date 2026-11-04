@@ -1,6 +1,7 @@
 """Scoped consultation HTTP and event transport."""
 
 from collections.abc import Callable, Coroutine
+from re import fullmatch
 from typing import Annotated, Any, override
 from uuid import uuid4
 
@@ -81,6 +82,19 @@ async def _access(request: Request, authorization: str | None) -> tuple[Consulta
     if not isinstance(runtime, ConsultationRuntime):
         await authenticate_platform(authorization)
         raise PlatformAuthenticationRequired
+    local_scope: tuple[str, str] | None = getattr(request.app.state, "consultation_local_scope", None)
+    if local_scope is not None:
+        subjects = request.headers.getlist("x-consultation-subject")
+        if (
+            request.client is None
+            or request.client.host not in {"127.0.0.1", "::1"}
+            or "forwarded" in request.headers
+            or any(name.startswith("x-forwarded-") for name in request.headers)
+            or len(subjects) != 1
+            or fullmatch(r"[A-Za-z0-9._:-]{1,128}", subjects[0]) is None
+        ):
+            raise PlatformAuthenticationRequired
+        return runtime, PlatformPrincipal(*local_scope, subjects[0])
     return runtime, await runtime.authenticate(authorization)
 
 

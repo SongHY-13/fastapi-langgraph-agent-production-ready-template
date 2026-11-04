@@ -1270,6 +1270,7 @@ dependencies = [
     { name = "duckduckgo-search" },
     { name = "email-validator" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "langchain" },
     { name = "langchain-community" },
     { name = "langchain-core" },
@@ -1329,7 +1330,6 @@ dev = [
     { name = "ruff" },
 ]
 test = [
-    { name = "httpx" },
     { name = "pytest" },
 ]
 
@@ -1347,6 +1347,7 @@ requires-dist = [
     { name = "email-validator", specifier = ">=2.2.0" },
     { name = "fastapi", specifier = ">=0.121.0" },
     { name = "flake8", marker = "extra == 'dev'" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "isort", marker = "extra == 'dev'" },
     { name = "langchain", specifier = ">=1.0.5" },
     { name = "langchain-anthropic", marker = "extra == 'anthropic'", specifier = ">=1.7.2" },
@@ -1392,7 +1393,6 @@ dev = [
     { name = "ruff", specifier = ">=0.11.4" },
 ]
 test = [
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=8.3.5" },
 ]
 

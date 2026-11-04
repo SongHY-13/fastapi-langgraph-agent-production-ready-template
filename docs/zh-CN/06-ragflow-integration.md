@@ -74,6 +74,28 @@ RetrievalResult
 
 每份资料另建业务目录记录，建议字段：`source_id`、`dataset_id`、`document_id`、`category`、`title`、`official_url`、`document_number`、`jurisdiction`、`audience`、`effective_from`、`effective_until`、`status`、`content_version`、`supersedes_source_id`、`reviewed_by`、`reviewed_at`、`published_version`、`checksum`。这些是建议的数据模型，尚无迁移或接口。
 
+配置模式读取审核目录的运行时投影 `CONSULTATION_CATALOG_PATH`。以下以现行《戒毒条例》展示一条记录。资料负责人核对正文、解析结果和适用范围后，替换数据集、文档和发布版本的占位值，再发布。`jurisdiction: null` 表示全国适用。
+
+```json
+[
+  {
+    "source": {
+      "source_id": "drug-rehabilitation-regulation-2018",
+      "title": "戒毒条例",
+      "source_url": "https://xzfg.moj.gov.cn/front/law/detail?LawID=324&Query=",
+      "effective_status": "effective"
+    },
+    "dataset_id": "<RAGFlow dataset ID>",
+    "document_id": "<RAGFlow document ID>",
+    "published_version": "<reviewed release version>",
+    "status": "published",
+    "jurisdiction": null,
+    "effective_from": "2018-09-18T00:00:00+08:00",
+    "effective_until": null
+  }
+]
+```
+
 时间以明确时区的业务时点判断，约定日期边界为生效日包含、失效时点不包含。空失效日只表示暂未给定结束时间，不代表已审核有效；未提供地域或政策有效性时，不据此自动推断适用政策。
 
 ## 4. 政策有效性必须在查询时生效

@@ -93,7 +93,7 @@ Docker Desktop 的 WSL 集成需在 Ubuntu 中启用。Windows Docker CLI 与 WS
 
 检查 [Swagger](http://127.0.0.1:8000/docs) 与 `/health`。`/health` 用于检查数据库连通；业务迁移、平台鉴权、模型和 RAG 需分别验证。平台接入按 [v0.4 协议](08-miniprogram-mvp-api.md) 实施。
 
-Compose app 的健康检查使用 curl，而当前 Dockerfile 未显式安装它；如选全容器运行，需一并验证该工具和健康状态。本次推荐直接复用现有 Windows 应用环境。
+首轮咨询联调可直接复用现有 Windows 应用环境，启动方式见下文。
 
 ## 5. 本地自测
 
@@ -108,16 +108,78 @@ Compose app 的健康检查使用 curl，而当前 Dockerfile 未显式安装它
 
 ## 6. 咨询运行配置
 
-`CONSULTATION_ENABLED` 默认关闭。部署方需在启动前向 `app.state.consultation_components_factory` 注入异步工厂，可通过 `compose_consultation` 组装依赖。工厂应提供真实平台鉴权、受控检索范围和发布目录、审核通过的风险策略、模型适配器。工厂缺失时，咨询路由即使可见也拒绝访问。图片处理需额外提供按平台用户授权的原文件读取和解码校验。当前仓库的离线测试不依赖付费密钥。
+### 启动首轮联调服务
 
-在部署工厂中构造 `OpenAICompatibleModel`，通过 `compose_consultation(model=...)` 注入。`base_url` 填 API 根地址，适配器会追加 `/chat/completions`。`model` 填部署端公布的模型 ID。需要鉴权时，使用 HTTPS 地址并从受控配置读取该端点自己的 `api_key`。无需鉴权的本地服务可以省略密钥。
+`python -m app.consultation_main` 只在 `127.0.0.1` 上监听，默认关闭咨询路由。平台后端从同一主机调用。只有平台对外提供转发接口，校验登录及会话归属后按[联调协议](08-miniprogram-mvp-api.md)重新设置用户标识头。首轮 `fixture` 模式运行真实路由、SSE、PostgreSQL 和 worker，模型、检索、安全与图片均用合成样例。
 
-| 配置 | 自部署 vLLM 示例 | DeepSeek 开发示例 |
-| --- | --- | --- |
-| `base_url` | `http://127.0.0.1:8000/v1` | `https://api.deepseek.com` |
-| `model` | 部署端公布的模型 ID | `deepseek-flash` |
-| `json_mode` | 确认支持 `response_format` 后启用 | `True` |
-| `deepseek_disable_thinking` | `False` | `True` |
-| `vision_approved` | 图文输入通过验收后启用 | 图文输入通过验收后启用 |
+在 PowerShell 进入项目根目录。以下命令使用专用临时数据库容器，也可以复用已有的隔离 `*_integration` 数据库并填入对应连接配置。
 
-`json_mode` 默认关闭。适配器仍要求模型返回 JSON 对象，并检查正文、来源和输出审核结果。`token_limit_field` 默认为 `max_tokens`，端点要求时可改为 `max_completion_tokens`。`timeout_seconds` 默认 4 秒，可按目标模型延迟调整，同时确保单轮工作流的总耗时预算低于 worker 租约。vLLM 的接口说明见 [OpenAI 兼容服务文档](https://docs.vllm.ai/en/stable/serving/online_serving/openai_compatible_server/)。
+```powershell
+$env:APP_ENV = 'test'
+$env:CONSULTATION_MODE = 'fixture'
+$env:CONSULTATION_PORT = '18084'
+$env:LANGFUSE_TRACING_ENABLED = 'false'
+$env:VALKEY_HOST = ''
+$env:POSTGRES_HOST = '127.0.0.1'
+$env:POSTGRES_PORT = '55484'
+$env:POSTGRES_DB = 'ai_consultation_integration'
+$env:POSTGRES_USER = 'consultation'
+$env:POSTGRES_PASSWORD = [Guid]::NewGuid().ToString('N')
+docker run --rm -d --name ai-consultation-v04-integration `
+  -p 127.0.0.1:55484:5432 `
+  -e POSTGRES_USER -e POSTGRES_PASSWORD -e POSTGRES_DB postgres:16-alpine
+docker exec ai-consultation-v04-integration pg_isready -h 127.0.0.1 -U consultation -d ai_consultation_integration
+```
+
+看到数据库接受连接后执行迁移，再启动服务。
+
+```powershell
+& .\.venv\Scripts\python.exe -m alembic upgrade head
+& .\.venv\Scripts\python.exe -m app.consultation_main
+```
+
+平台配置 `http://127.0.0.1:18084/api/v1/consultations`。本机可用 `/docs` 查看请求与响应。停止服务用 `Ctrl+C`，停止本节创建的临时容器用 `docker stop ai-consultation-v04-integration`。
+
+| `text` | 预期表现 |
+| --- | --- |
+| `联调：普通` | 合成答案、`fixture-source` 引用、`fixture_booking` 卡片 |
+| `联调：慢速` | 延迟约三秒，可测取消及同会话高风险抢占 |
+| `联调：高风险` | `human_handoff_required` |
+| `联调：拒答` / `联调：人工` | 违规拒答 / `human_handoff_suggested` |
+| `联调：无依据` / `联调：超范围` | 连续两个不同消息 ID 可触发普通人工建议 |
+| `联调：图片` | 发送一张 PNG，`file_id` 为 `fixture-<X-Consultation-Subject 的值>`。合成原图随服务提供，客户端传该 PNG 的 Base64 |
+
+PNG 样例 `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC`。其余文本默认返回 `503`，联调只使用表中的合成输入。
+
+### 接入真实服务
+
+用同一启动入口，设置 `CONSULTATION_MODE=configured`。启动先检查必填设置、数据库结构、目录格式和策略模块。部署方通过进程环境或项目选定的 `.env` 文件提供以下变量。
+
+| 环境变量 | 用途 |
+| --- | --- |
+| `CONSULTATION_CALLER_ID`、`CONSULTATION_TENANT_ID` | 部署方固定的调用方和租户 |
+| `CONSULTATION_MODEL_BASE_URL`、`CONSULTATION_MODEL_ID`、可选 `CONSULTATION_MODEL_API_KEY` | OpenAI 兼容 API 根地址及模型 ID，适配器追加 `/chat/completions` |
+| `CONSULTATION_MODEL_VISION`、`CONSULTATION_MODEL_JSON_MODE`、`CONSULTATION_MODEL_DISABLE_THINKING` | 按模型实际能力启用，默认关闭 |
+| `CONSULTATION_MODEL_TIMEOUT_SECONDS`、`CONSULTATION_MODEL_TOKEN_LIMIT_FIELD` | 默认 `8` 秒和 `max_tokens`，超时可设为大于 0 且不超过 12 秒，字段也可用 `max_completion_tokens` |
+| `CONSULTATION_RAGFLOW_BASE_URL`、`CONSULTATION_RAGFLOW_API_KEY`、`CONSULTATION_RAGFLOW_DATASET_IDS` | RAGFlow 服务根地址、凭据和 JSON 数组形式的数据集 ID |
+| `CONSULTATION_CATALOG_PATH`、`CONSULTATION_PUBLISHED_VERSION`、可选 `CONSULTATION_REGION` | 审核发布目录 JSON 路径、发布版本和适用地区 |
+| `CONSULTATION_POLICY_MODULE`、可选 `CONSULTATION_ALLOWED_ACTIONS` | 受信任的 Python 模块名和 JSON 数组形式的动作字典 |
+
+策略模块实现同步 `build_policy(model, transport) -> DeploymentPolicy`，返回审核过的异步输入分类和业务范围判断，可选按用户读取原图的 `ImageResolver`。带图请求要求同时启用模型视觉和原图解析器。目录采用 `ApprovedDocument` 对象数组，记录实际 RAGFlow 数据集和文档 ID、发布版本、状态、地区和带时区的有效期。`source` 为 `AnswerSource`，发布项的 `source.effective_status` 填 `effective`。发布方以原子替换更新目录文件，检索及发送前复核会重新读取。携带密钥的上游地址使用 HTTPS 或本机回环地址。
+
+## 7. Linux ARM64 部署验证
+
+Compose 的 pgvector 服务使用镜像原生架构，发布方为 `pg16` 提供 amd64 和 arm64 镜像。Python 3.13 的锁定依赖已核对 ARM64 wheel 标签。2026-11-04 在 Windows x64 上实际发起 ARM64 构建，默认 Docker builder 拉取了 ARM64 Python 基础镜像，执行 `/bin/sh` 时返回 `exec format error`。独立 BuildKit builder 重试时，Docker Hub 取令牌超时。原生 ARM64 构建和服务冒烟仍需在目标机执行。[pgvector 镜像标签](https://hub.docker.com/r/pgvector/pgvector/tags) · [Docker 多架构构建](https://docs.docker.com/build/building/multi-platform/)
+
+在 Linux ARM64 上准备专用数据库及 `consultation.env`（包括上一节所需环境变量），从项目根目录构建和验证：
+
+```bash
+docker buildx build --platform linux/arm64 --load -t ai-consultation:arm64 .
+docker image inspect ai-consultation:arm64 --format '{{.Os}}/{{.Architecture}}'
+docker run --rm --network host --env-file consultation.env \
+  --entrypoint /app/.venv/bin/python ai-consultation:arm64 -m alembic upgrade head
+docker run --rm --network host --env-file consultation.env \
+  --entrypoint /app/.venv/bin/python ai-consultation:arm64 -m app.consultation_main
+```
+
+同机平台进程访问回环端口。`--network host` 使容器内服务和宿主机平台共用回环接口。配置模式还需将审核目录及策略模块提供给容器。先用合成模式验证提交、SSE 和结果查询，再接入真实上游执行验收。若客户模型或 RAGFlow 也在 ARM 机器上运行，须另行验证它们的镜像、推理后端和硬件支持。
